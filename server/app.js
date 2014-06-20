@@ -37,14 +37,13 @@ app.listen(APP_PORT, APP_HOST);
 app.get('/app/listen', function(){});
 
 app.use('/app/message', function(req, res) {
-    res.find(req.param('to'), function(user) {
-        if(!user)
-            return res.send(new packages.Error('not online'));
-
-        res.message(user, new packages.Message(
-            req.session.data('username'),
-            req.param('body')
-        ));
+    res.find(req.param('to'), function(to) {
+        if(to) {
+            res.message(to, req.event);
+        } else {
+            req.event._status = {sent: false, e: 'not online'};
+            res.jsonp(req.event);
+        }
     });
 });
 
@@ -52,33 +51,37 @@ app.use('/app/message/typing', function(req, res) {
     if(~packages.TYPING_STATES.indexOf('typing' + req.param('state'))) {
         res.find(req.param('to'), function(user) {
             if(user) {
-                res.message(user, new packages.Status(
-                    req.session.data('username'),
-                    'typing' + req.param('state')
-                ));
+                req.event.status = 'typing' + req.param('state');
+                res.message(user, req.event);
+            } else {
+                // Typing updates do not receive confirmations,
+                // as they are not important enough.
+                req.event._status = {sent: false, e: 'invalid user'};
+                res.jsonp(req.event);
             }
-
-            // Typing updates do not receive confirmations,
-            // as they are not important enough.
-            res.send('');
         });
     } else {
-        res.send(new packages.Error('invalid state'));
+        req.event._status = {sent: false, e: 'invalid state'};
+        res.jsonp(req.event);
     }
 });
 
 app.use('/app/status', function(req, res) {
     if(~packages.STATUSES.indexOf(req.param('status'))) {
-        res.status(req.param('status'), req.param('message'));
-        res.send(new packages.Success('status updated'));
+        res.status(req.event);
     } else {
-        res.send(new packages.Error('invalid status'));
+        req.event._status = {sent: false, e: 'invalid status'};
+        res.jsonp(req.event);
     }
 });
 
+app.use('/app/noop', function(req, res) {
+    req.event._status = {sent: true};
+    res.session.respond(res, req.event);
+});
+
 app.use('/app/signoff', function(req, res) {
-    res.signOff();
-    res.send(new packages.Success('goodbye'));
+    res.signOff(req.event);
 });
 
 console.log('Ajax IM server started...');

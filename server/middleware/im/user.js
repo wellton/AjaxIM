@@ -18,18 +18,20 @@ var User = module.exports = function(req, data) {
     setInterval(o_.bind(this._expireConns, this), 500);
 };
 
-User.prototype.receivedUpdate = function(package) {
-    if(this.friends.indexOf(package.username))
-        this.send(package);
+User.prototype.receivedUpdate = function(event) {
+    event = o_.extend({}, event);
+    event.to = this.data('username');
+    if(this.friends.indexOf(event.from))
+        this.send(event);
 };
 
 User.prototype._friends = function(friends) {
     this.friends = friends;
-    this.send(JSON.stringify({
+    this.send({
         type: 'hello',
         username: this.data('username'),
         friends: friends
-    }));
+    });
 };
 
 User.prototype._expireConns = function() {
@@ -54,52 +56,28 @@ User.prototype.listener = function(conn) {
     this.listeners.push(conn);
 };
 
-User.prototype.respond = function(code, message, callback) {
-    this._send(this.req.jsonpCallback? 'listener': 'connection', code, message, callback);
+User.prototype.respond = function(res, event) {
+    this._send('connection', event, res);
 };
 
-User.prototype.send = function(code, message, callback) {
-    this._send('listener', code, message, callback);
+User.prototype.send = function(event) {
+    this._send('listener', event);
 };
 
-User.prototype.addCallback = function(message) {
-    return ((typeof this.req.jsonpCallback) != 'undefined')? this.req.jsonpCallback+'('+message+');': message;
-};
-
-User.prototype._send = function(type, code, message, callback) {
-    if(!message && typeof code != 'number') {
-        callback = message;
-        message = code;
-        code = 200;
-    }
-
-    if(typeof message != 'string')
-        message = JSON.stringify(message);
-
-    if(type == 'connection' && this.connection) {
+User.prototype._send = function(type, event, res) {
+    if(type == 'connection') {
         // end a regular connection with a response
-        this.connection.writeHead(code || 200, {
-//            'Content-Type': 'application/json',
-            'Content-Type': 'application/javascript',
-            'Content-Length': this.addCallback(message).length
-        });
-        this.connection.end(this.addCallback(message));
+        res.jsonp(event);
     } else {
-        // add a message to a long-polling connection
+        // end a long-polling connection with an event
         if(!this.listeners.length)
             return this.message_queue.push(arguments);
 
         var cx = this.listeners.slice(), conn;
         this.listeners = [];
         while(conn = cx.shift()) {
-            conn.writeHead(code || 200, {
-//                'Content-Type': 'application/json',
-                'Content-Type': 'application/javascript',
-                'Content-Length': this.addCallback(message).length
-            });
-            conn.end(this.addCallback(message));
+            conn.jsonp(event);
         }
-        if(callback) callback();
     }
 };
 
@@ -114,11 +92,15 @@ User.prototype.touch = function() {
     this.lastAccess = +new Date;
 };
 
-User.prototype.status = function(value, message) {
-    if(!value)
+User.prototype.status = function(res, event) {
+    if(!event)
         return this._status;
     
-    this._status = value;
-    this._status_message = message;
-    this.events.emit('status', value, message);
+    this._status = event.status;
+    this._status_message = event.message;
+    this.events.emit('status', event.status, event.message);
+    event._status = {sent: true};
+    if (res) {
+       this.respond(res, event);
+    }
 };

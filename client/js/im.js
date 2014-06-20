@@ -47,6 +47,7 @@ AjaxIM = function(options, actions) {
         // requests rather than POST requests (such as how the Node.JS Ajax IM
         // server works).
         this.actions = $.extend({
+            noop: this.settings.pollServer + '/app/noop',
             listen: this.settings.pollServer + '/app/listen',
             send: this.settings.pollServer + '/app/message',
             status: this.settings.pollServer + '/app/status',
@@ -258,6 +259,13 @@ AjaxIM = function(options, actions) {
                 self._scrollers();
             } catch(e) {}
         });
+
+        // Set up event handling
+        this.onEvent('hello', this.onHello);
+        this.onEvent('message', this.onMessage);
+        this.onEvent('status', this.onStatus);
+        this.onEvent('notice', this.onNotice);
+        this.onEvent('goodbye', this.onGoodbye);
     } else {
         return AjaxIM.init(options);
     }
@@ -403,66 +411,61 @@ $.extend(AjaxIM.prototype, {
                                      : Math.min(self._reconnectIn * 2, 16000);
                 self._lastReconnect = new Date();
                 setTimeout(function() { self.listen(); }, self._reconnectIn);
-            }
+            },
+            this.actions.noop
         );
     },
 
     // === //private// {{{AjaxIM.}}}**{{{_parseMessages(messages)}}}** ===
     //
     _parseMessage: function(message) {
+        this.triggerEvent(message);
+    },
+
+    onHello: function(message) {
         var self = this;
-        $(this).trigger('parseMessage', [message]);
+        this._clearSession();
 
-        switch(message.type) {
-            case 'hello':
-                this._clearSession();
+        this.username = message.username;
+        this.current_status = ['available', ''];
+        store.set('user', message.username);
+        store.set(this.username + '-status', this.current_status);
 
-                this.username = message.username;
-                this.current_status = ['available', ''];
-                store.set('user', message.username);
-                store.set(this.username + '-status', this.current_status);
+        $('#imjs-friends').attr('class', 'imjs-available');
+        $.each(message.friends, function() {
+            var friend;
+            if(this.length == 2)
+                friend = this;
+            else
+                friend = [this.toString(), ['offline', '']];
+            self.addFriend(friend[0], friend[1], 'Friends');
+        });
+        store.set(this.username + '-friends', this.friends);
 
-                $('#imjs-friends').attr('class', 'imjs-available');
-                $.each(message.friends, function() {
-                    var friend;
-                    if(this.length == 2)
-                        friend = this;
-                    else
-                        friend = [this.toString(), ['offline', '']];
-                    self.addFriend(friend[0], friend[1], 'Friends');
-                });
-                store.set(this.username + '-friends', this.friends);
-                
-                // Set username in Friends list
-                var header = $('#imjs-friends-panel .imjs-header');
-                header.html(header.html().replace('{username}', this.username));
-                
-                // Set status available
-                $('#imjs-away-message-text, #imjs-away-message-text-arrow').hide();
-                $('#imjs-status-panel .imjs-button').removeClass('imjs-toggled');
-                $('#imjs-button-available').addClass('imjs-toggled');
-            break;
+        // Set username in Friends list
+        var header = $('#imjs-friends-panel .imjs-header');
+        header.html(header.html().replace('{username}', this.username));
 
-            case 'message':
-                this.incoming(message.user, message.body);
-            break;
+        // Set status available
+        $('#imjs-away-message-text, #imjs-away-message-text-arrow').hide();
+        $('#imjs-status-panel .imjs-button').removeClass('imjs-toggled');
+        $('#imjs-button-available').addClass('imjs-toggled');
+    },
 
-            case 'status':
-                this._friendUpdate(message.user, message.status,
-                                   message.message);
-                this._storeFriends();
-            break;
+    onMessage: function(event) {
+         this.incoming(event.from, event.body);
+    },
 
-            case 'notice':
-            break;
-            
-            case 'goodbye':
-                this._notConnected();
-            break;
+    onStatus: function(event) {
+        this._friendUpdate(event.from, event.status, event.message);
+        this._storeFriends();
+    },
 
-            default:
-            break;
-        }
+    onNotice: function(event) {
+    },
+
+    onGoodbye: function(event) {
+        this._notConnected();
     },
 
     // === {{{AjaxIM.}}}**{{{incoming(from, message)}}}** ===
@@ -922,23 +925,17 @@ $.extend(AjaxIM.prototype, {
 
         $(this).trigger('sendingMessage', [username, body]);
 
-        AjaxIM.post(
-            this.actions.send,
-            {to: username, body: body},
-            function(result) {
-                if(result.type == 'success' && result.success == 'sent') {
-                    $(self).trigger('sendMessageSuccessful',
-                                    [username, body]);
+        var event = {type: 'message', to: username, body: body};
+        this.sendEvent(event, function(result) {
+                if(result._status.send) {
+                    $(self).trigger('sendMessageSuccessful', [username, body]);
                 } else if(result.type == 'error') {
                     if(result.error == 'not online')
-                        $(self).trigger('sendMessageFailed',
-                                        ['offline', username, body]);
+                        $(self).trigger('sendMessageFailed', ['offline', username, body]);
                     else
-                        $(self).trigger('sendMessageFailed',
-                                        [result.error, username, body]);
+                        $(self).trigger('sendMessageFailed', [result.error, username, body]);
                 }
-            },
-            function(error) {
+        }, function(error) {
                 self._notConnected();
                 var error = self._addError(
                               self.chats[username],
@@ -946,11 +943,9 @@ $.extend(AjaxIM.prototype, {
                               'server is not available. Please ensure ' +
                               'that you are signed in and try again.');
                 self._store(error);
-
                 $(self).trigger('sendMessageFailed',
                                 ['not connected', username, body]);
-            }
-        );
+        });
     },
 
     // === {{{AjaxIM.}}}**{{{status(s, message)}}}** ===
@@ -999,31 +994,27 @@ $.extend(AjaxIM.prototype, {
                 }
             );
         } else {
-            AjaxIM.post(
-                this.actions.status,
-                {status: value, message: message},
-                function(result) {
-                    switch(result.type) {
-                        case 'success':
-                            $(self).trigger('changeStatusSuccessful',
-                                            [value, message]);
-                            self.current_status = [value, message];
-                            store.set(self.username + '-status',
-                                      self.current_status);
-                        break;
-    
-                        case 'error':
-                        default:
-                            $(self).trigger('changeStatusFailed',
-                                            [result.e, value, message]);
-                        break;
-                    }
-                },
-                function(error) {
-                    $(self).trigger('changeStatusFailed',
-                                    ['not connected', value, message]);
-                }
-            );
+           var event = {type: 'status', status: value, message: message};
+           this.sendEvent(event, function(result) {
+               if(result._status.send) {
+                   $(self).trigger('sendMessageSuccessful', [username, body]);
+               } else if(result.type == 'error') {
+                   if(result.error == 'not online')
+                       $(self).trigger('sendMessageFailed', ['offline', username, body]);
+                   else
+                       $(self).trigger('sendMessageFailed', [result.error, username, body]);
+                   }
+           }, function(error) {
+               self._notConnected();
+               var error = self._addError(
+                                   self.chats[username],
+                                   'You are currently not connected or the ' +
+                                   'server is not available. Please ensure ' +
+                                   'that you are signed in and try again.');
+               self._store(error);
+               $(self).trigger('sendMessageFailed',
+                                     ['not connected', username, body]);
+           });
         }
     },
 
@@ -1332,6 +1323,97 @@ $.extend(AjaxIM.prototype, {
 
         $('#imjs-scroll-left').html(hiddenLeft);
         $('#imjs-scroll-right').html(hiddenRight);
+    },
+
+    unconfirmedEvents: {},
+    eventId: 1,
+
+    createEvent: function() {
+        var event = {};
+        event.id = this.eventId++;;
+        this.unconfirmedEvents[event.id] = evt;
+    },
+
+    sendEvent: function(event, successFunc, failureFunc) {
+        event.id = this.eventId++;
+        var evt = $.extend({}, event);
+        evt['_status'] = {
+            successFunc: successFunc,
+            failureFunc: failureFunc
+        };
+        this.unconfirmedEvents[event.id] = evt;
+
+        var self = this;
+        var url = null;
+        switch (event.type) {
+            case 'message':
+                url = this.actions.send;
+                break;
+            case 'status':
+               url = this.actions.status;
+               break;
+            case 'signoff':
+               url = this.actions.signoff;
+               break;
+            default:
+               break;
+        }
+
+        AjaxIM.post(url, event,
+            function(result) {
+                if (result) {
+                    for (var e=0; e < result.length; ++e) {
+                        self.dispatchEvent(events[e]);
+                    }
+                }
+            },
+            function(error) {
+                if (self.unconfirmedEvents[event.id]) {
+                    event = self.unconfirmedEvents[event.id];
+                    event['_status']['sent'] = false;
+                    self.dispatchEvent(event);
+                }
+            }
+        );
+    },
+
+    dispatchEvent: function(event) {
+       if (this.unconfirmedEvents[event.id]) {
+           $.extend(event, this.unconfirmedEvents[event.id]);
+           delete this.unconfirmedEvents[event.id];
+           console.log(JSON.stringify(event));
+           if (event['_status']['sent']) {
+              event['_status']['successFunc'](event);
+           } else {
+              event['_status']['failureFunc'](event);
+           }
+       } else {
+           this.triggerEvent(event);
+       }
+    },
+    
+    // poor man's Backbone.js Events
+    eventHandlers: {},
+
+    /**
+     * Add a callback to listen for an event type.
+     */
+    onEvent: function(eventType, callback) {
+        if (!this.eventHandlers[eventType]) {
+            this.eventHandlers[eventType] = [];
+        }
+        this.eventHandlers[eventType].push(callback);
+    },
+
+    /**
+     * Trigger an event on all interested callbacks.
+     */
+    triggerEvent: function(event) {
+        if (this.eventHandlers[event.type]) {
+            for (var e=0; e < this.eventHandlers[event.type].length; ++e) {
+                this.eventHandlers[event.type][e].call(this, event);
+            }
+        }
     }
 })
 
@@ -1360,7 +1442,7 @@ AjaxIM.init = function(options, actions) {
         AjaxIM.client = new AjaxIM(options, actions);
 
     return AjaxIM.client;
-}
+};
 
 
 // === {{{AjaxIM.}}}**{{{request(url, data, successFunc, failureFunc)}}}** ===
@@ -1377,20 +1459,21 @@ AjaxIM.init = function(options, actions) {
 // {{{_ignore_}}} is simply to provide compatability with {{{$.post}}}.
 // {{{failure}}} is a callback function called when a request hasn't not
 // completed successfully.
-AjaxIM.post = function(url, data, successFunc, failureFunc) {
-    AjaxIM.request(url, 'POST', data, successFunc, failureFunc);
+AjaxIM.post = function(url, data, successFunc, failureFunc, urlnoop) {
+    AjaxIM.request(url, 'POST', data, successFunc, failureFunc, urlnoop);
 };
 
-AjaxIM.get = function(url, data, successFunc, failureFunc) {
-    AjaxIM.request(url, 'GET', data, successFunc, failureFunc);
+AjaxIM.get = function(url, data, successFunc, failureFunc, urlnoop) {
+    AjaxIM.request(url, 'GET', data, successFunc, failureFunc, urlnoop);
 };
 
-AjaxIM.request = function(url, type, data, successFunc, failureFunc) {
+AjaxIM.request = function(url, type, data, successFunc, failureFunc, noopurl) {
     var errorTypes = ['timeout', 'error', 'notmodified', 'parseerror'];
     if(typeof failureFunc != 'function')
         failureFunc = function(){};
 
     var jsonp = (url.substring(0, 1) !== '/');
+    var success = false;
     data['sessionid'] = cookies.get('sessionid');
     $.ajax({
         url: url,
@@ -1400,12 +1483,54 @@ AjaxIM.request = function(url, type, data, successFunc, failureFunc) {
         cache: false,
         timeout: 299000
     }).done(function(data) {
+       success = true;
        _dbg(JSON.stringify(data));
        successFunc(data);
     }).fail(function(jqXHR, textStatus) {
        _dbg(textStatus);
        failureFunc(textStatus);
     });
+
+    if (jsonp) {
+        setTimeout(function() {
+            var failfn = function() {
+                if (!success) {
+                    var textStatus = 'error';
+                    _dbg(textStatus);
+                    failureFunc(textStatus);
+                }
+            };
+            if (noopurl) {
+                var noopfn = function() {
+                    var noopdone = false;
+                    var event = {type: 'noop'};
+                    $.ajax({
+                        url: noopurl,
+                        data: event,
+                        dataType: 'jsonp',
+                        type: type,
+                        cache: false,
+                        timeout: 299000
+                    }).done(function(data) {
+                        noopdone = true;
+                        if (!success) {
+                           setTimeout(noopfn, 3000);
+                        }
+                    }).fail(function(jqXHR, textStatus) {
+                        // since JSONP, never called
+                    });
+                    setTimeout(function() {
+                        if (!noopdone) {
+                            failfn();
+                        }
+                    }, 3000);
+                };
+                noopfn();
+            } else {
+                failfn();
+            }
+        }, 3000);
+    }
 
     // This prevents Firefox from spinning indefinitely
     // while it waits for a response.
@@ -1433,7 +1558,9 @@ AjaxIM.incoming = function(data) {
 
     if(data.length)
         AjaxIM.client._parseMessages(data);
-}
+};
+
+AjaxIM.eventID = 1;
 
 // === {{{AjaxIM.}}}**{{{l10n}}}** ===
 //

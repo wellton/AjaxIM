@@ -9,6 +9,21 @@ module.exports = o_ = {
             a[keys[i]] = b[keys[i]];
         return a;
     },
+
+    extend: function() {
+        var o = {};
+        for (var a=0; a < arguments.length; ++a) {
+            this.merge(o, arguments[a]);
+        }
+        return o;
+    },
+
+    deletekey: function(o, key) {
+        if (o.hasOwnProperty(key)) {
+            delete o[key];
+        }
+        return o;
+    },
     
     values: function(obj) {
         if(typeof obj == 'array')
