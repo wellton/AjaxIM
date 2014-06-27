@@ -56,10 +56,6 @@ User.prototype.listener = function(conn) {
     this.listeners.push(conn);
 };
 
-User.prototype.respond = function(res, event) {
-    this._send('connection', event, res);
-};
-
 User.prototype.send = function(event) {
     this._send('listener', event);
 };
@@ -101,6 +97,6 @@ User.prototype.status = function(res, event) {
     this.events.emit('status', event.status, event.message);
     event._status = {sent: true};
     if (res) {
-       this.respond(res, event);
+       res.jsonp(event);
     }
 };

@@ -112,10 +112,10 @@ Hub.prototype.message = function(res, to, event) {
     try {
         to.send(event);
         event._status = {sent: true};
-        res.session.respond(res, event);
+        res.jsonp(event);
     } catch(e) {
         event._status = {sent: false, e: e.description};
-        res.session.respond(res, event);
+        res.jsonp(event);
     }
 };
 
@@ -127,6 +127,6 @@ Hub.prototype.signOff = function(sid, res, event) {
     }
     event._status = {sent: true};
     if (res) {
-        res.session.respond(res, event);
+        res.jsonp(event);
     }
 };

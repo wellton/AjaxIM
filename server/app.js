@@ -77,7 +77,7 @@ app.use('/app/status', function(req, res) {
 
 app.use('/app/noop', function(req, res) {
     req.event._status = {sent: true};
-    res.session.respond(res, req.event);
+    res.jsonp(req.event);
 });
 
 app.use('/app/signoff', function(req, res) {
