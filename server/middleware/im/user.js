@@ -26,7 +26,7 @@ User.prototype.close = function() {
        'Content-Type': 'application/json',
        'Content-Length': noop.length
    };
-   for(var i = this.listeners.length; i >= 0; i--) {
+   for(var i = this.listeners.length-1; i >= 0; i--) {
        conn = this.listeners[i].connection;
        this.listeners[i].writeHead(200, noop_headers);
        this.listeners[i].end(noop);
