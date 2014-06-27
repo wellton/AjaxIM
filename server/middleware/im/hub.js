@@ -84,12 +84,12 @@ Hub.prototype.get = function(req, fn) {
                                       o_.bind(session.receivedUpdate, session));
                     this.set(req.sessionID, session);
                     fn(null, session);
-                }, this));
+                }, this), this);
                 session.status(null, {status: packages.STATUSES[0], message: ''});
             } else {
                 fn();
             }
-        }, this));
+        }, this), this);
     }
 };
 
