@@ -857,6 +857,9 @@ $.extend(AjaxIM.prototype, {
             msglog[0].scrollTop = msglog[0].scrollHeight;
         }
 
+        if (!this.friends[friend]) {
+            this.addFriend(friend, [status, statusMessage], 'Friends');
+        }
         if(this.friends[friend]) {
             var friend_id = 'imjs-friend-' + md5.hex(friend + this.friends[friend].group);
             $('#' + friend_id).attr('class', 'imjs-friend imjs-' + status);
