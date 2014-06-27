@@ -46,6 +46,8 @@ Hub.prototype.reap = function(ms) {
         if(sess.lastAccess < threshold) {
             var event = {type: 'status', from: sess.data('username'), status: 'offline', message: ''};
             this.events.emit('update', event);
+            delete this.sessions[sid];
+            sess.close();
         }
     }
 };
