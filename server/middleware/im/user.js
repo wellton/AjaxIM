@@ -15,7 +15,22 @@ var User = module.exports = function(req, data) {
     this._status = packages.STATUSES[0];
     this._status_message = '';
 
-    setInterval(o_.bind(this._expireConns, this), 500);
+    this.interval = setInterval(o_.bind(this._expireConns, this), 500);
+};
+
+User.prototype.close = function() {
+   clearInterval(this.interval);
+   var conn,
+   noop = JSON.stringify({type: 'noop'}),
+   noop_headers = {
+       'Content-Type': 'application/json',
+       'Content-Length': noop.length
+   };
+   for(var i = this.listeners.length; i >= 0; i--) {
+       conn = this.listeners[i].connection;
+       this.listeners[i].writeHead(200, noop_headers);
+       this.listeners[i].end(noop);
+   }
 };
 
 User.prototype.receivedUpdate = function(event) {
