@@ -1,32 +1,24 @@
+var o_ = require('../../utils');
+
 // Cookie that stores the session ID
 // Will be set as request.sessionID in `authenticate` and `friends` functions
 exports.cookie = 'sessionid';
 
-exports.authenticate = function(request, callback) {
+exports.authenticate = function(request, callback, hub) {
     // Verify user based on request.
     // On failure, redirect user to auth form
 
+    hub.uid++;
     callback({
-        username: 'username' + Math.floor(Math.random() * 10),
+        username: 'username' + hub.uid,
         displayname: 'John Smith',
         otherinfo: 'any other relevant key/values'
     });
 };
 
-exports.friends = function(request, data, callback) {
+exports.friends = function(request, data, callback, hub) {
     // Create a friends list based on given user data
-
-    
-    callback([
-        'username0',
-        'username1',
-        'username2',
-        'username3',
-        'username4',
-        'username5',
-        'username6',
-        'username7',
-        'username8',
-        'username9'
-    ]);
+    callback(o_.values(hub.sessions).map(function(friend) {
+        return friend.data('username');
+    }));
 };

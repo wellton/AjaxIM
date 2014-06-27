@@ -5,6 +5,7 @@ var events = require('events'),
     User = require('./user');
 
 var Hub = module.exports = function Hub(options) {
+    this.uid = 0;
     this.events = new events.EventEmitter();
     this.auth = options.authentication;
     this.sessions = {};
