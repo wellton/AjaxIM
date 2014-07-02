@@ -8,9 +8,8 @@ exports.authenticate = function(request, callback, hub) {
     // Verify user based on request.
     // On failure, redirect user to auth form
 
-    hub.uid++;
     callback({
-        username: 'username' + hub.uid,
+        username: 'username' + (++hub.uid),
         displayname: 'John Smith',
         otherinfo: 'any other relevant key/values'
     });
