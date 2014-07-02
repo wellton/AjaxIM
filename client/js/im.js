@@ -54,6 +54,12 @@ AjaxIM = function(options, actions) {
             signoff: this.settings.pollServer + '/app/signoff'
         }, actions);
 
+        // If Socket.IO is available, create a socket
+        self.socket = null;
+        $.getScript(this.settings.pollServer+'/socket.io/socket.io.js', function(){
+            self.socket = io(self.settings.pollServer);
+        });
+
         // We load the theme dynamically based on the passed
         // settings. If the theme is set to false, we assume
         // that the user is going to load it himself.
