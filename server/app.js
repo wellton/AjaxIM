@@ -1,13 +1,14 @@
 #!/usr/bin/env node
-var sys = require('sys'),
-    express = require('express'),
+var express = require('express'),
+    app = express(),
+    http = require('http').Server(app),
+    sys = require('sys'),
     packages = require('./libs/packages'),
     o_ = require('./libs/utils');
 
 o_.merge(global, require('./settings'));
 try { o_.merge(global, require('./settings.local')); } catch(e) {}
 
-var app = express();
 //app.set('env', 'development');
 app.use(require('method-override')());
 app.use(require('cookie-parser')());;
@@ -31,7 +32,9 @@ if ('development' == app.get('env')) {
     app.use(require('express-error-handler')({dumpExceptions: true, showStack: true}));
 }
 
-app.listen(APP_PORT, APP_HOST);
+http.listen(APP_PORT, APP_HOST, function(){
+    console.log('Ajax IM server started...');
+});
 
 // Listener endpoint; handled in middleware
 app.get('/app/listen', function(){});
@@ -83,5 +86,3 @@ app.use('/app/noop', function(req, res) {
 app.use('/app/signoff', function(req, res) {
     res.signOff(req.event);
 });
-
-console.log('Ajax IM server started...');
