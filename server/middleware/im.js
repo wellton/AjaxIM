@@ -7,7 +7,7 @@ module.exports = function setupHub(options) {
 
     store = new Hub(options);
 
-    return function session(req, res, next) {
+    return {hub: store, session: function session(req, res, next) {
         req.sessionStore = store;
 
         if(!req.cookies) {
@@ -89,5 +89,5 @@ module.exports = function setupHub(options) {
                                         type: 'error',
                                         error: 'not authenticated'})));
         }
-    };
+    }};
 };

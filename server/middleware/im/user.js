@@ -76,7 +76,16 @@ User.prototype.send = function(event) {
 };
 
 User.prototype._send = function(type, event, res) {
-    if(type == 'connection') {
+    if (this.socketio) {
+        var id = event.id;
+        if (event.id) {
+            delete event.id;
+        }
+        this.socketio.emit('client', event);
+        if (id) {
+            event.id = id;
+        }
+    } else if(type == 'connection') {
         // end a regular connection with a response
         res.jsonp(event);
     } else {
@@ -115,3 +124,12 @@ User.prototype.status = function(res, event) {
        res.jsonp(event);
     }
 };
+
+User.prototype.dispatch = function(hub, event) {
+    if (event.type == 'message') {
+        hub.find(event.to, function(to) {
+            hub.message(null, to, event);
+        });
+    }
+};
+

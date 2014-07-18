@@ -58,6 +58,12 @@ AjaxIM = function(options, actions) {
         self.socket = null;
         $.getScript(this.settings.pollServer+'/socket.io/socket.io.js', function(){
             self.socket = io(self.settings.pollServer);
+            self.socket.on('client', function(event) {
+               event = $.extend(true, {}, event);
+               self.dispatchEvent(event);
+            });
+            var event = {type: 'hello', from: this.username, sessionID: cookies.get('sessionid')};
+            self.sendEvent(event);
         });
 
         // We load the theme dynamically based on the passed
@@ -280,6 +286,7 @@ AjaxIM = function(options, actions) {
 $.extend(AjaxIM.prototype, {
     // == Main ==
     setup: function() {
+        var self = this;
         $(this).trigger('loadComplete');
 
         this.initTabBar();
@@ -291,7 +298,6 @@ $.extend(AjaxIM.prototype, {
         if(this.username && store.get(this.username + '-offline') == true) {
             this.offline = true;
             
-            var self = this;
             setTimeout(function() { self._showReconnect(); }, 0);
             return;
         }
@@ -299,7 +305,7 @@ $.extend(AjaxIM.prototype, {
         if(this.username)
             this.storage();
 
-        this.listen();
+        setTimeout(function() { if (!self.socket) self.listen(); }, 2000);
     },
 
     // === {{{AjaxIM.}}}**{{{storage()}}}** ===
@@ -405,7 +411,9 @@ $.extend(AjaxIM.prototype, {
                     self._parseMessage(response);
                 }
 
-                setTimeout(function() { self.listen(); }, 0);
+                if (!self.socket) {
+                    setTimeout(function() { self.listen(); }, 0);
+                }
             },
             function(error) {
                 self._notConnected();
@@ -416,7 +424,9 @@ $.extend(AjaxIM.prototype, {
                                      ? 1000
                                      : Math.min(self._reconnectIn * 2, 16000);
                 self._lastReconnect = new Date();
-                setTimeout(function() { self.listen(); }, self._reconnectIn);
+                if (!self.socket) {
+                    setTimeout(function() { self.listen(); }, self._reconnectIn);
+                }
             },
             this.actions.noop
         );
@@ -934,9 +944,9 @@ $.extend(AjaxIM.prototype, {
 
         $(this).trigger('sendingMessage', [username, body]);
 
-        var event = {type: 'message', to: username, body: body};
+        var event = {type: 'message', from: this.username, to: username, body: body};
         this.sendEvent(event, function(result) {
-                if(result._status.send) {
+                if(result._status.sent) {
                     $(self).trigger('sendMessageSuccessful', [username, body]);
                 } else if(result.type == 'error') {
                     if(result.error == 'not online')
@@ -1351,46 +1361,48 @@ $.extend(AjaxIM.prototype, {
             failureFunc: failureFunc
         };
         this.unconfirmedEvents[event.id] = evt;
+        if (this.socket) {
+            this.socket.emit('server', event);
+        } else {
+            var self = this;
+            var url = null;
+            switch (event.type) {
+                case 'message':
+                    url = this.actions.send;
+                    break;
+                case 'status':
+                   url = this.actions.status;
+                   break;
+                case 'signoff':
+                   url = this.actions.signoff;
+                   break;
+                default:
+                   break;
+            }
 
-        var self = this;
-        var url = null;
-        switch (event.type) {
-            case 'message':
-                url = this.actions.send;
-                break;
-            case 'status':
-               url = this.actions.status;
-               break;
-            case 'signoff':
-               url = this.actions.signoff;
-               break;
-            default:
-               break;
-        }
-
-        AjaxIM.post(url, event,
-            function(result) {
-                if (result) {
-                    for (var e=0; e < result.length; ++e) {
-                        self.dispatchEvent(events[e]);
+            AjaxIM.post(url, event,
+                function(result) {
+                    if (result) {
+                        for (var e=0; e < result.length; ++e) {
+                            self.dispatchEvent(events[e]);
+                        }
+                    }
+                },
+                function(error) {
+                    if (self.unconfirmedEvents[event.id]) {
+                        event = self.unconfirmedEvents[event.id];
+                        event['_status']['sent'] = false;
+                        self.dispatchEvent(event);
                     }
                 }
-            },
-            function(error) {
-                if (self.unconfirmedEvents[event.id]) {
-                    event = self.unconfirmedEvents[event.id];
-                    event['_status']['sent'] = false;
-                    self.dispatchEvent(event);
-                }
-            }
-        );
+            );
+        }
     },
 
     dispatchEvent: function(event) {
-       if (this.unconfirmedEvents[event.id]) {
-           $.extend(event, this.unconfirmedEvents[event.id]);
+       if (event.id && this.unconfirmedEvents[event.id]) {
+           event['_status'] = $.extend({}, this.unconfirmedEvents[event.id]['_status'], event['_status']);
            delete this.unconfirmedEvents[event.id];
-           console.log(JSON.stringify(event));
            if (event['_status']['sent']) {
               event['_status']['successFunc'](event);
            } else {

@@ -63,6 +63,9 @@ Hub.prototype.get = function(req, fn) {
         this.auth.authenticate(req, o_.bind(function(data) {
             if(data) {
                 var session = new User(req, data);
+                if (req.socketio) {
+                    session.socketio = req.socketio;
+                }
                 this.set(req.sessionID, session);
 
                 this.auth.friends(req, data, o_.bind(function(friends) {
@@ -115,7 +118,13 @@ Hub.prototype.message = function(res, to, event) {
     try {
         to.send(event);
         event._status = {sent: true};
-        res.jsonp(event);
+        if (res) {
+            res.jsonp(event);
+        } else {
+            this.find(event.from, function(from) {
+                from.socketio.emit('client', event);
+            });
+        }
     } catch(e) {
         event._status = {sent: false, e: e.description};
         res.jsonp(event);

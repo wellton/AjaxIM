@@ -2,6 +2,7 @@
 var express = require('express'),
     app = express(),
     http = require('http').Server(app),
+    io = require('socket.io')(http),
     sys = require('sys'),
     packages = require('./libs/packages'),
     o_ = require('./libs/utils');
@@ -13,11 +14,13 @@ try { o_.merge(global, require('./settings.local')); } catch(e) {}
 app.use(require('method-override')());
 app.use(require('cookie-parser')());;
 app.use(require('body-parser')());;
-app.use(require('./middleware/im')({
-   maxAge: 15 * 60 * 1000,
+var mw = require('./middleware/im')({
+   maxAge: 60 * 1000,
    reapInterval: 60 * 1000,
    authentication: require('./libs/authentication/' + AUTH_LIBRARY)
-}));
+});
+app.use(mw.session);
+var hub = mw.hub;
 
 app.set('root', __dirname);
 
@@ -31,6 +34,23 @@ if ('development' == app.get('env')) {
                 require('path').join(__dirname, '../client')));
     app.use(require('express-error-handler')({dumpExceptions: true, showStack: true}));
 }
+
+io.on('connection', function(socket){
+    socket.on('server', function(event) {
+        if (event.type == 'hello') {
+            event.socketio = socket;
+            hub.get(event, function(err, sess) { 
+                sess.touch();
+                store.set(event.sessionID, sess);
+            });
+        } else {
+            hub.find(event.from, function(from) {
+                from.socketio = socket;
+                from.dispatch(hub, event);
+            });
+        }
+    });
+});
 
 http.listen(APP_PORT, APP_HOST, function(){
     console.log('Ajax IM server started...');
