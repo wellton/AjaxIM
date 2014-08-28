@@ -71,17 +71,17 @@ AjaxIM = function(options, actions) {
         // that the user is going to load it himself.
         this.themeLoaded = false;
         if(this.settings.theme) {
+            if(typeof document.createStyleSheet == 'function')
+                document.createStyleSheet(this.settings.theme + '/theme.css');
+            else
+                $('body').append('<link rel="stylesheet" href="' +
+                    this.settings.theme + '/theme.css" />');
             $('<div>').appendTo('body').load(this.settings.theme + '/theme.html #imjs-bar, .imjs-tooltip',
                 function() {
                     self.themeLoaded = true;
                     self.setup();
                 }
             );
-            if(typeof document.createStyleSheet == 'function')
-                document.createStyleSheet(this.settings.theme + '/theme.css');
-            else
-                $('body').append('<link rel="stylesheet" href="' +
-                    this.settings.theme + '/theme.css" />');
         } else {
             this.themeLoaded = true;
             this.setup();
@@ -142,6 +142,9 @@ AjaxIM = function(options, actions) {
             chatbox.find('.imjs-input').focus();
             if(!(input = chatbox.find('.imjs-input')).data('height')) {
                 // store the height for resizing later
+                if (!input.height()) {
+                   input.height(16);
+                }
                 input.data('height', input.height());
             }
         });
@@ -1194,6 +1197,9 @@ $.extend(AjaxIM.prototype, {
                 }
 
                 // store the height for resizing later
+                if (!input.height()) {
+                   input.height(16);
+                }
                 input.data('height', input.height());
             }
 
