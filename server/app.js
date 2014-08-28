@@ -12,8 +12,8 @@ try { o_.merge(global, require('./settings.local')); } catch(e) {}
 
 //app.set('env', 'development');
 app.use(require('method-override')());
-app.use(require('cookie-parser')());;
-app.use(require('body-parser')());;
+app.use(require('cookie-parser')());
+app.use(require('body-parser').json());
 var mw = require('./middleware/im')({
    maxAge: 60 * 1000,
    reapInterval: 60 * 1000,
