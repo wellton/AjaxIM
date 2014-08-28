@@ -269,6 +269,7 @@ ul#imjs-bar {
         font-size: 9px;
         font-weight: 700;
         background-repeat: no-repeat;
+        display: none;
     } 
     
         ul#imjs-bar li#imjs-scroll-left {
