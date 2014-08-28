@@ -289,6 +289,7 @@ $.extend(AjaxIM.prototype, {
         var self = this;
         $(this).trigger('loadComplete');
 
+        $('.imjs-scroll').css('display', 'none');
         this.initTabBar();
         this._scrollers();
 
