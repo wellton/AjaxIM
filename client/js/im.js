@@ -54,6 +54,10 @@ AjaxIM = function(options, actions) {
             signoff: this.settings.pollServer + '/app/signoff'
         }, actions);
 
+        if (!store.get('sessionid')) {
+            store.set('sessionid', uid(40));
+        }
+
         // If Socket.IO is available, create a socket
         self.socket = null;
         $.getScript(this.settings.pollServer+'/socket.io/socket.io.js', function(){
@@ -62,7 +66,7 @@ AjaxIM = function(options, actions) {
                event = $.extend(true, {}, event);
                self.dispatchEvent(event);
             });
-            var event = {type: 'hello', from: this.username, sessionID: cookies.get('sessionid')};
+            var event = {type: 'hello', from: store.get('user'), sessionID: store.get('sessionid')};
             self.sendEvent(event);
         });
 
@@ -1502,7 +1506,7 @@ AjaxIM.request = function(url, type, data, successFunc, failureFunc, noopurl) {
 
     var jsonp = (url.substring(0, 1) !== '/');
     var success = false;
-    data['sessionid'] = cookies.get('sessionid');
+    data['sessionid'] = store.get('sessionid');
     $.ajax({
         url: url,
         data: data,
@@ -1532,6 +1536,7 @@ AjaxIM.request = function(url, type, data, successFunc, failureFunc, noopurl) {
                 var noopfn = function() {
                     var noopdone = false;
                     var event = {type: 'noop'};
+                    event['sessionid'] = store.get('sessionid');
                     $.ajax({
                         url: noopurl,
                         data: event,
