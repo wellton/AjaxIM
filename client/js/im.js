@@ -406,7 +406,7 @@ $.extend(AjaxIM.prototype, {
         if(this.offline) return;
 
         var self = this;
-        AjaxIM.get(
+        self.get(
             this.actions.listen,
             {},
             function(response) {
@@ -658,7 +658,7 @@ $.extend(AjaxIM.prototype, {
                 this.notification(tab);
             }
 
-            setTimeout(function() { self._scrollers() }, 0);
+            setTimeout(function() { self._scrollers(); }, 0);
         }
 
         return chatbox;
@@ -1007,7 +1007,7 @@ $.extend(AjaxIM.prototype, {
             self.offline = true;
             $('.imjs-input').attr('disabled', true);
 
-            AjaxIM.post(
+            self.post(
                 this.actions.signoff,
                 {},
                 function(result) {
@@ -1341,14 +1341,14 @@ $.extend(AjaxIM.prototype, {
             .nextAll('#imjs-bar li.imjs-tab:hidden')
             .not('.imjs-default')
             .filter(function() {
-                return $(this).data('state') != 'closed'
+                return $(this).data('state') != 'closed';
             }).length;
 
         var hiddenLeft = $('#imjs-bar li.imjs-tab:visible').eq(0)
             .prevAll('#imjs-bar li.imjs-tab:hidden')
             .not('.imjs-default')
             .filter(function() {
-                return $(this).data('state') != 'closed'
+                return $(this).data('state') != 'closed';
             }).length;
 
         $('#imjs-scroll-left').html(hiddenLeft);
@@ -1391,7 +1391,7 @@ $.extend(AjaxIM.prototype, {
                    break;
             }
 
-            AjaxIM.post(url, event,
+            self.post(url, event,
                 function(result) {
                     if (result) {
                         for (var e=0; e < result.length; ++e) {
@@ -1446,8 +1446,108 @@ $.extend(AjaxIM.prototype, {
                 this.eventHandlers[event.type][e].call(this, event);
             }
         }
+    },
+
+    // === {{{AjaxIM.}}}**{{{request(url, data, successFunc, failureFunc)}}}** ===
+    //
+    // Wrapper around {{{$.jsonp}}}, the JSON-P library for jQuery, and {{{$.ajax}}},
+    // jQuery's ajax library. Allows either function to be called, automatically,
+    // depending on the request's URL array (see {{{AjaxIM.actions}}}).
+    //
+    // ==== Parameters ====
+    // {{{url}}} is the URL of the request.
+    // {{{data}}} are any arguments that go along with the request.
+    // {{{success}}} is a callback function called when a request has completed
+    // without issue.
+    // {{{_ignore_}}} is simply to provide compatability with {{{$.post}}}.
+    // {{{failure}}} is a callback function called when a request hasn't not
+    // completed successfully.
+    post: function(url, data, successFunc, failureFunc, urlnoop) {
+        this.request(url, 'POST', data, successFunc, failureFunc, urlnoop);
+    },
+
+    get: function(url, data, successFunc, failureFunc, urlnoop) {
+        this.request(url, 'GET', data, successFunc, failureFunc, urlnoop);
+    },
+
+    request: function(url, type, data, successFunc, failureFunc, noopurl) {
+        var errorTypes = ['timeout', 'error', 'notmodified', 'parseerror'];
+        if(typeof failureFunc != 'function')
+            failureFunc = function(){};
+
+        var jsonp = (url.substring(0, 1) !== '/');
+        var success = false;
+        data['sessionid'] = store.get('sessionid');
+        $.ajax({
+            url: url,
+            data: data,
+            dataType: jsonp? 'jsonp': 'json',
+            type: type,
+            cache: false,
+            timeout: 299000
+        }).done(function(data) {
+           success = true;
+           _dbg(JSON.stringify(data));
+           successFunc(data);
+        }).fail(function(jqXHR, textStatus) {
+           _dbg(textStatus);
+           failureFunc(textStatus);
+        });
+
+        if (jsonp) {
+            setTimeout(function() {
+                var failfn = function() {
+                    if (!success) {
+                        var textStatus = 'error';
+                        _dbg(textStatus);
+                        failureFunc(textStatus);
+                    }
+                };
+                if (noopurl) {
+                    var noopfn = function() {
+                        var noopdone = false;
+                        var event = {type: 'noop'};
+                        event['sessionid'] = store.get('sessionid');
+                        $.ajax({
+                            url: noopurl,
+                            data: event,
+                            dataType: 'jsonp',
+                            type: type,
+                            cache: false,
+                            timeout: 299000
+                        }).done(function(data) {
+                            noopdone = true;
+                            if (!success) {
+                               setTimeout(noopfn, 3000);
+                            }
+                        }).fail(function(jqXHR, textStatus) {
+                            // since JSONP, never called
+                        });
+                        setTimeout(function() {
+                            if (!noopdone) {
+                                failfn();
+                            }
+                        }, 3000);
+                    };
+                    noopfn();
+                } else {
+                    failfn();
+                }
+            }, 3000);
+        }
+
+        // This prevents Firefox from spinning indefinitely
+        // while it waits for a response.
+        /*
+        if(url == 'jsonp' && $.browser.mozilla) {
+            $.jsonp({
+                'url': 'about:',
+                timeout: 0
+            });
+        }
+        */
     }
-})
+});
 
 // == Static functions and variables ==
 //
@@ -1474,107 +1574,6 @@ AjaxIM.init = function(options, actions) {
         AjaxIM.client = new AjaxIM(options, actions);
 
     return AjaxIM.client;
-};
-
-
-// === {{{AjaxIM.}}}**{{{request(url, data, successFunc, failureFunc)}}}** ===
-//
-// Wrapper around {{{$.jsonp}}}, the JSON-P library for jQuery, and {{{$.ajax}}},
-// jQuery's ajax library. Allows either function to be called, automatically,
-// depending on the request's URL array (see {{{AjaxIM.actions}}}).
-//
-// ==== Parameters ====
-// {{{url}}} is the URL of the request.
-// {{{data}}} are any arguments that go along with the request.
-// {{{success}}} is a callback function called when a request has completed
-// without issue.
-// {{{_ignore_}}} is simply to provide compatability with {{{$.post}}}.
-// {{{failure}}} is a callback function called when a request hasn't not
-// completed successfully.
-AjaxIM.post = function(url, data, successFunc, failureFunc, urlnoop) {
-    AjaxIM.request(url, 'POST', data, successFunc, failureFunc, urlnoop);
-};
-
-AjaxIM.get = function(url, data, successFunc, failureFunc, urlnoop) {
-    AjaxIM.request(url, 'GET', data, successFunc, failureFunc, urlnoop);
-};
-
-AjaxIM.request = function(url, type, data, successFunc, failureFunc, noopurl) {
-    var errorTypes = ['timeout', 'error', 'notmodified', 'parseerror'];
-    if(typeof failureFunc != 'function')
-        failureFunc = function(){};
-
-    var jsonp = (url.substring(0, 1) !== '/');
-    var success = false;
-    data['sessionid'] = store.get('sessionid');
-    $.ajax({
-        url: url,
-        data: data,
-        dataType: jsonp? 'jsonp': 'json',
-        type: type,
-        cache: false,
-        timeout: 299000
-    }).done(function(data) {
-       success = true;
-       _dbg(JSON.stringify(data));
-       successFunc(data);
-    }).fail(function(jqXHR, textStatus) {
-       _dbg(textStatus);
-       failureFunc(textStatus);
-    });
-
-    if (jsonp) {
-        setTimeout(function() {
-            var failfn = function() {
-                if (!success) {
-                    var textStatus = 'error';
-                    _dbg(textStatus);
-                    failureFunc(textStatus);
-                }
-            };
-            if (noopurl) {
-                var noopfn = function() {
-                    var noopdone = false;
-                    var event = {type: 'noop'};
-                    event['sessionid'] = store.get('sessionid');
-                    $.ajax({
-                        url: noopurl,
-                        data: event,
-                        dataType: 'jsonp',
-                        type: type,
-                        cache: false,
-                        timeout: 299000
-                    }).done(function(data) {
-                        noopdone = true;
-                        if (!success) {
-                           setTimeout(noopfn, 3000);
-                        }
-                    }).fail(function(jqXHR, textStatus) {
-                        // since JSONP, never called
-                    });
-                    setTimeout(function() {
-                        if (!noopdone) {
-                            failfn();
-                        }
-                    }, 3000);
-                };
-                noopfn();
-            } else {
-                failfn();
-            }
-        }, 3000);
-    }
-
-    // This prevents Firefox from spinning indefinitely
-    // while it waits for a response.
-    /*
-    if(url == 'jsonp' && $.browser.mozilla) {
-        $.jsonp({
-            'url': 'about:',
-            timeout: 0
-        });
-    }
-    */
 };
 
 // === {{{AjaxIM.}}}**{{{incoming(data)}}}** ===
