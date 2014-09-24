@@ -406,8 +406,9 @@ $.extend(AjaxIM.prototype, {
         if(this.offline) return;
 
         var self = this;
-        self.get(
+        self.request(
             this.actions.listen,
+            'GET',
             {},
             function(response) {
                 if($.isArray(response)) {
@@ -435,8 +436,7 @@ $.extend(AjaxIM.prototype, {
                 if (!self.socket) {
                     setTimeout(function() { self.listen(); }, self._reconnectIn);
                 }
-            },
-            this.actions.noop
+            }
         );
     },
 
@@ -1007,13 +1007,10 @@ $.extend(AjaxIM.prototype, {
             self.offline = true;
             $('.imjs-input').attr('disabled', true);
 
-            self.post(
-                this.actions.signoff,
-                {},
-                function(result) {
-                    if(result.type == 'success')
-                        $(self).trigger('changeStatusSuccessful',
-                                        [value, null]);
+            var event = {type: 'signoff'};
+            this.sendEvent(event, function(result) {
+                if(result.type == 'success')
+                    $(self).trigger('changeStatusSuccessful', [value, null]);
                 },
                 function(error) {
                     $(self).trigger('changeStatusFailed',
@@ -1391,7 +1388,7 @@ $.extend(AjaxIM.prototype, {
                    break;
             }
 
-            self.post(url, event,
+            self.request(url, 'POST', event,
                 function(result) {
                     if (result) {
                         for (var e=0; e < result.length; ++e) {
@@ -1462,15 +1459,8 @@ $.extend(AjaxIM.prototype, {
     // {{{_ignore_}}} is simply to provide compatability with {{{$.post}}}.
     // {{{failure}}} is a callback function called when a request hasn't not
     // completed successfully.
-    post: function(url, data, successFunc, failureFunc, urlnoop) {
-        this.request(url, 'POST', data, successFunc, failureFunc, urlnoop);
-    },
-
-    get: function(url, data, successFunc, failureFunc, urlnoop) {
-        this.request(url, 'GET', data, successFunc, failureFunc, urlnoop);
-    },
-
     request: function(url, type, data, successFunc, failureFunc, noopurl) {
+        var self = this;
         var errorTypes = ['timeout', 'error', 'notmodified', 'parseerror'];
         if(typeof failureFunc != 'function')
             failureFunc = function(){};
@@ -1503,36 +1493,32 @@ $.extend(AjaxIM.prototype, {
                         failureFunc(textStatus);
                     }
                 };
-                if (noopurl) {
-                    var noopfn = function() {
-                        var noopdone = false;
-                        var event = {type: 'noop'};
-                        event['sessionid'] = store.get('sessionid');
-                        $.ajax({
-                            url: noopurl,
-                            data: event,
-                            dataType: 'jsonp',
-                            type: type,
-                            cache: false,
-                            timeout: 299000
-                        }).done(function(data) {
-                            noopdone = true;
-                            if (!success) {
-                               setTimeout(noopfn, 3000);
-                            }
-                        }).fail(function(jqXHR, textStatus) {
-                            // since JSONP, never called
-                        });
-                        setTimeout(function() {
-                            if (!noopdone) {
-                                failfn();
-                            }
-                        }, 3000);
-                    };
-                    noopfn();
-                } else {
-                    failfn();
-                }
+                var noopfn = function() {
+                    var noopdone = false;
+                    var event = {type: 'noop'};
+                    event['sessionid'] = store.get('sessionid');
+                    $.ajax({
+                        url: self.actions.noop,
+                        data: event,
+                        dataType: 'jsonp',
+                        type: type,
+                        cache: false,
+                        timeout: 299000
+                    }).done(function(data) {
+                        noopdone = true;
+                        if (!success) {
+                            setTimeout(noopfn, 3000);
+                        }
+                    }).fail(function(jqXHR, textStatus) {
+                        // since JSONP, never called
+                    });
+                    setTimeout(function() {
+                        if (!noopdone) {
+                            failfn();
+                        }
+                    }, 3000);
+                };
+                noopfn();
             }, 3000);
         }
 
