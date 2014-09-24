@@ -280,11 +280,11 @@ AjaxIM = function(options, actions) {
         });
 
         // Set up event handling
-        this.onEvent('hello', this.onHello);
-        this.onEvent('message', this.onMessage);
-        this.onEvent('status', this.onStatus);
-        this.onEvent('notice', this.onNotice);
-        this.onEvent('goodbye', this.onGoodbye);
+        $(this).on('hello', AjaxIM.onObj(this, this.onHello));
+        $(this).on('message', AjaxIM.onObj(this, this.onMessage));
+        $(this).on('status', AjaxIM.onObj(this, this.onStatus));
+        $(this).on('notice', AjaxIM.onObj(this, this.onNotice));
+        $(this).on('goodbye', AjaxIM.onObj(this, this.onGoodbye));
     } else {
         return AjaxIM.init(options);
     }
@@ -410,14 +410,14 @@ $.extend(AjaxIM.prototype, {
             this.actions.listen,
             'GET',
             {},
-            function(response) {
-                if($.isArray(response)) {
-                    $.each(response, function(key, value) {
-                        self._parseMessage(value);
+            function(event) {
+                if($.isArray(event)) {
+                    $.each(event, function(key, event) {
+                        $(self).trigger(event.type, event);
                     });
                 }
-                else if($.isPlainObject(response)) {
-                    self._parseMessage(response);
+                else if($.isPlainObject(event)) {
+                    $(self).trigger(event.type, event);
                 }
 
                 if (!self.socket) {
@@ -438,12 +438,6 @@ $.extend(AjaxIM.prototype, {
                 }
             }
         );
-    },
-
-    // === //private// {{{AjaxIM.}}}**{{{_parseMessages(messages)}}}** ===
-    //
-    _parseMessage: function(message) {
-        this.triggerEvent(message);
     },
 
     onHello: function(message) {
@@ -1417,34 +1411,10 @@ $.extend(AjaxIM.prototype, {
               event['_status']['failureFunc'](event);
            }
        } else {
-           this.triggerEvent(event);
+           $(this).trigger(event.type, event);
        }
     },
     
-    // poor man's Backbone.js Events
-    eventHandlers: {},
-
-    /**
-     * Add a callback to listen for an event type.
-     */
-    onEvent: function(eventType, callback) {
-        if (!this.eventHandlers[eventType]) {
-            this.eventHandlers[eventType] = [];
-        }
-        this.eventHandlers[eventType].push(callback);
-    },
-
-    /**
-     * Trigger an event on all interested callbacks.
-     */
-    triggerEvent: function(event) {
-        if (this.eventHandlers[event.type]) {
-            for (var e=0; e < this.eventHandlers[event.type].length; ++e) {
-                this.eventHandlers[event.type][e].call(this, event);
-            }
-        }
-    },
-
     // === {{{AjaxIM.}}}**{{{request(url, data, successFunc, failureFunc)}}}** ===
     //
     // Wrapper around {{{$.jsonp}}}, the JSON-P library for jQuery, and {{{$.ajax}}},
@@ -1570,12 +1540,12 @@ AjaxIM.init = function(options, actions) {
 // //Note:// There are two {{{AjaxIM.incoming()}}} functions. This one is a
 // static function called outside of the initialized AjaxIM object; the other
 // is only called within the initalized AjaxIM object.
-AjaxIM.incoming = function(data) {
+AjaxIM.incoming = function(event) {
     if(!AjaxIM.client)
         return false;
 
-    if(data.length)
-        AjaxIM.client._parseMessages(data);
+    if(event.length)
+        $(AjaxIM.client).trigger(event.type, event);
 };
 
 AjaxIM.eventID = 1;
@@ -1612,6 +1582,12 @@ AjaxIM.l10n = {
     notConnectedTip: 'You are currently not connected.',
     
     defaultAway: 'I\'m away.'
+};
+
+AjaxIM.onObj = function(obj, func) {
+    return function(evt, event) {
+        $.proxy(func, obj)(event);
+    };
 };
 
 AjaxIM.debug = true;
