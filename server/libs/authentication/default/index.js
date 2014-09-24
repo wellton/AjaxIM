@@ -1,15 +1,14 @@
 var o_ = require('../../utils');
 
-// Cookie that stores the session ID
-// Will be set as request.sessionID in `authenticate` and `friends` functions
-exports.cookie = 'sessionid';
-
 exports.authenticate = function(request, callback, hub) {
     // Verify user based on request.
     // On failure, redirect user to auth form
-
+    var username = request.from;
+    if (!username) {
+        username = 'username' + (++hub.uid);
+    }
     callback({
-        username: 'username' + (++hub.uid),
+        username: username,
         displayname: 'John Smith',
         otherinfo: 'any other relevant key/values'
     });

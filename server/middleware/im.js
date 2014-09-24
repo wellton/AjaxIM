@@ -10,27 +10,7 @@ module.exports = function setupHub(options) {
     return {hub: store, session: function session(req, res, next) {
         req.sessionStore = store;
 
-        if(!req.cookies) {
-            next(new Error('session requires cookieParser to work properly'));
-            return;
-        }
-
-        // move "fake" cookies from query or body (for JSONP)
-        if (!(options.authentication.cookie in req.cookies)) {
-           if (req.param(options.authentication.cookie)) {
-              req.cookies[options.authentication.cookie] = req.param(options.authentication.cookie);
-           }
-        }
-
-        // move "fake" cookies from query or body (for JSONP)
-        if (!('callback' in req.cookies)) {
-           if (req.param('callback')) {
-              req.cookies['callback'] = req.param('callback');
-           }
-        }
-
-        req.sessionID = req.cookies[options.authentication.cookie];
-        req.jsonpCallback = req.cookies.callback;
+        req.sessionID = req.param('sessionid');
 
         if(url.parse(req.url).pathname.substring(0, 5) !== '/app/') {
             next();
