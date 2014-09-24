@@ -3,6 +3,7 @@ var express = require('express'),
     app = express(),
     http = require('http').Server(app),
     io = require('socket.io')(http),
+    bodyParser = require('body-parser'),
     sys = require('sys'),
     packages = require('./libs/packages'),
     o_ = require('./libs/utils');
@@ -13,7 +14,8 @@ try { o_.merge(global, require('./settings.local')); } catch(e) {}
 //app.set('env', 'development');
 app.use(require('method-override')());
 app.use(require('cookie-parser')());
-app.use(require('body-parser').json());
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded());
 var mw = require('./middleware/im')({
    maxAge: 60 * 1000,
    reapInterval: 60 * 1000,
