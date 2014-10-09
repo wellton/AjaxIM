@@ -55,7 +55,7 @@ AjaxIM = function(options, actions) {
         }, actions);
 
         if (!store.get('sessionid')) {
-            store.set('sessionid', uid(40));
+            store.set('sessionid', AjaxIM.uid(40));
         }
 
         // If Socket.IO is available, create a socket
@@ -63,24 +63,26 @@ AjaxIM = function(options, actions) {
         $.getScript(this.settings.pollServer+'/socket.io/socket.io.js', function(){
             self.socket = io(self.settings.pollServer);
             self.socket.on('client', function(event) {
-               event = $.extend(true, {}, event);
-               self.dispatchEvent(event);
+                event = $.extend(true, {}, event);
+                self.dispatchEvent(event);
             });
-            var event = {type: 'hello', from: store.get('user'), sessionID: store.get('sessionid')};
-            self.sendEvent(event);
+            var event = {type: 'hello', from: store.get('user')};
+            self.sendEvent(event, function() {}, function() {});
         });
 
         // We load the theme dynamically based on the passed
         // settings. If the theme is set to false, we assume
         // that the user is going to load it himself.
         this.themeLoaded = false;
-        if(this.settings.theme) {
-            if(typeof document.createStyleSheet == 'function')
+        if (this.settings.theme) {
+            if(typeof document.createStyleSheet == 'function') {
                 document.createStyleSheet(this.settings.theme + '/theme.css');
-            else
+            } else {
                 $('body').append('<link rel="stylesheet" href="' +
                     this.settings.theme + '/theme.css" />');
-            $('<div>').appendTo('body').load(this.settings.theme + '/theme.html #imjs-bar, .imjs-tooltip',
+            }
+            $('<div>').appendTo('body').load(this.settings.theme +
+                    '/theme.html #imjs-bar, .imjs-tooltip',
                 function() {
                     self.themeLoaded = true;
                     self.setup();
@@ -115,7 +117,6 @@ AjaxIM = function(options, actions) {
                     var obj = $(this);
                     self.send(obj.parents('.imjs-chatbox').data('username'), obj.val());
                 }
-
                 var obj = $(this);
                 obj.val('');
                 obj.height(obj.data('height'));
@@ -371,7 +372,7 @@ $.extend(AjaxIM.prototype, {
             var msglog = this.chats[activeTab].find('.imjs-msglog');
             msglog[0].scrollTop = msglog[0].scrollHeight;
         }
-        
+
         // Set username in Friends list
         var header = $('#imjs-friends-panel .imjs-header');
         header.html(header.html().replace('{username}', this.username));
@@ -409,7 +410,7 @@ $.extend(AjaxIM.prototype, {
         self.request(
             this.actions.listen,
             'GET',
-            {},
+            {type: 'hello', from: store.get('user'), sessionid: store.get('sessionid')},
             function(event) {
                 if($.isArray(event)) {
                     $.each(event, function(key, event) {
@@ -471,7 +472,7 @@ $.extend(AjaxIM.prototype, {
     },
 
     onMessage: function(event) {
-         this.incoming(event.from, event.body);
+        this.incoming(event.from, event.body);
     },
 
     onStatus: function(event) {
@@ -909,7 +910,7 @@ $.extend(AjaxIM.prototype, {
         if($('#imjs-friends').hasClass('imjs-selected'))
             this.activateTab($('#imjs-friends'));
     },
-    
+
     _showReconnect: function() {
         $('#imjs-reconnect').show();
     },
@@ -969,6 +970,10 @@ $.extend(AjaxIM.prototype, {
         });
     },
 
+    signOff: function() {
+        this.status('offline', '');
+    },
+
     // === {{{AjaxIM.}}}**{{{status(s, message)}}}** ===
     //
     // Sets the user's status and status message. It is possible to not
@@ -1001,7 +1006,7 @@ $.extend(AjaxIM.prototype, {
             self.offline = true;
             $('.imjs-input').attr('disabled', true);
 
-            var event = {type: 'signoff'};
+            var event = {type: 'signoff', message: message};
             this.sendEvent(event, function(result) {
                 if(result.type == 'success')
                     $(self).trigger('changeStatusSuccessful', [value, null]);
@@ -1302,8 +1307,8 @@ $.extend(AjaxIM.prototype, {
 
             var tab_pos = tab.position();
             if(tab_pos.top >= $('#imjs-bar').height() ||
-               tab_pos.left < 0 ||
-               tab_pos.right > $(document).width()) {
+                    tab_pos.left < 0 ||
+                    tab_pos.right > $(document).width()) {
                 $('.imjs-scroll').css('display', '');
                 tab.css('display', 'none');
                 needScrollers = true;
@@ -1356,6 +1361,7 @@ $.extend(AjaxIM.prototype, {
     },
 
     sendEvent: function(event, successFunc, failureFunc) {
+        event.sessionid = store.get('sessionid');
         event.id = this.eventId++;
         var evt = $.extend({}, event);
         evt['_status'] = {
@@ -1402,19 +1408,19 @@ $.extend(AjaxIM.prototype, {
     },
 
     dispatchEvent: function(event) {
-       if (event.id && this.unconfirmedEvents[event.id]) {
-           event['_status'] = $.extend({}, this.unconfirmedEvents[event.id]['_status'], event['_status']);
-           delete this.unconfirmedEvents[event.id];
-           if (event['_status']['sent']) {
-              event['_status']['successFunc'](event);
-           } else {
-              event['_status']['failureFunc'](event);
-           }
-       } else {
-           $(this).trigger(event.type, event);
-       }
+        if (event.id && this.unconfirmedEvents[event.id]) {
+            event['_status'] = $.extend({}, this.unconfirmedEvents[event.id]['_status'], event['_status']);
+            delete this.unconfirmedEvents[event.id];
+            if (event['_status']['sent']) {
+                event['_status']['successFunc'](event);
+            } else {
+                event['_status']['failureFunc'](event);
+            }
+        } else {
+            $(this).trigger(event.type, event);
+        }
     },
-    
+
     // === {{{AjaxIM.}}}**{{{request(url, data, successFunc, failureFunc)}}}** ===
     //
     // Wrapper around {{{$.jsonp}}}, the JSON-P library for jQuery, and {{{$.ajax}}},
@@ -1437,7 +1443,6 @@ $.extend(AjaxIM.prototype, {
 
         var jsonp = (url.substring(0, 1) !== '/');
         var success = false;
-        data['sessionid'] = store.get('sessionid');
         $.ajax({
             url: url,
             data: data,
@@ -1465,8 +1470,7 @@ $.extend(AjaxIM.prototype, {
                 };
                 var noopfn = function() {
                     var noopdone = false;
-                    var event = {type: 'noop'};
-                    event['sessionid'] = store.get('sessionid');
+                    var event = {type: 'noop', from: store.get('user'), sessionid: store.get('sessionid')};
                     $.ajax({
                         url: self.actions.noop,
                         data: event,
@@ -1548,7 +1552,19 @@ AjaxIM.incoming = function(event) {
         $(AjaxIM.client).trigger(event.type, event);
 };
 
-AjaxIM.eventID = 1;
+AjaxIM.uid = function(n){
+    var chars='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', nn='';
+    for(var c=0; c < n; c++){
+        nn += chars.substr(0|Math.random() * chars.length, 1);
+    }
+    return nn;
+};
+
+AjaxIM.onObj = function(obj, func) {
+    return function(evt, event) {
+        $.proxy(func, obj)(event);
+    };
+};
 
 // === {{{AjaxIM.}}}**{{{l10n}}}** ===
 //
@@ -1580,25 +1596,11 @@ AjaxIM.l10n = {
     notConnected: 'You are currently not connected or the server is not available. ' +
                   'Please ensure that you are signed in and try again.',
     notConnectedTip: 'You are currently not connected.',
-    
-    defaultAway: 'I\'m away.'
-};
 
-AjaxIM.onObj = function(obj, func) {
-    return function(evt, event) {
-        $.proxy(func, obj)(event);
-    };
+    defaultAway: 'I\'m away.'
 };
 
 AjaxIM.debug = true;
 function _dbg(msg) {
     if(AjaxIM.debug && window.console) console.log(msg);
-}
-
-function uid(n){
-   var chars='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', nn='';
-   for(var c=0; c < n; c++){
-      nn += chars.substr(0|Math.random() * chars.length, 1);
-   }
-   return nn;
 }
