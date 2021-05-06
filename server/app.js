@@ -1,28 +1,26 @@
 #!/usr/bin/env node
-var express = require('express'),
-    app = express(),
-    http = require('http').Server(app),
-//    io = require('socket.io')(http), // uncomment to enable Socket.IO
-    bodyParser = require('body-parser'),
-    sys = require('sys'),
+var sys = require('util'),
+    express = require('express'),
+    packages = require('./libs/packages'),
     o_ = require('./libs/utils');
 
 o_.merge(global, require('./settings'));
 try { o_.merge(global, require('./settings.local')); } catch(e) {}
 
-var reapInterval = (typeof io === 'undefined')? 60 * 1000: -1;
-
+var app = express();
 //app.set('env', 'development');
+app.use( require('request-param')() )
+
 app.use(require('method-override')());
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({extended: true}));
-var mw = require('./middleware/im')({
-    maxAge: 60 * 1000,
-    reapInterval: reapInterval,
-    authentication: require('./libs/authentication/' + AUTH_LIBRARY)
-});
-app.use(mw.session);
-var store = mw.store;
+app.use(require('cookie-parser')());;
+//app.use(require('body-parser')());;
+app.use(require('body-parser').urlencoded({extended: true}));;
+app.use(require('body-parser').json());;
+app.use(require('./middleware/im')({
+   maxAge: 15 * 60 * 1000,
+   reapInterval: 60 * 1000,
+   authentication: require('./libs/authentication/' + AUTH_LIBRARY)
+}));
 
 app.set('root', __dirname);
 
@@ -30,79 +28,62 @@ if ('development' == app.get('env')) {
     app.set('views', __dirname + '/dev/views');
     app.set('view engine', 'jade');
     
-    app.use(require("morgan")('combined'));
+    app.use(require("morgan")("dev"));
     require('./dev/app')('/dev', app);
     app.use(express.static(
                 require('path').join(__dirname, '../client')));
     app.use(require('express-error-handler')({dumpExceptions: true, showStack: true}));
 }
 
-// Socket.IO handlers
-if (typeof io !== 'undefined') {
-    io.on('connection', function(socket){
-        var username = null;
-        socket.on('server', function(event) {
-            event.reply = function(status) {
-                if (status) {
-                    this._status = status;
-                }
-                delete this.reply;
-                socket.emit('client', this);
-            };
-            var unauthenticated = function() {
-                event.reply({sent: false, e: 'unauthenticated'});
-            };
-            store.get(event, function(event, user) {
-                if ((event.type == 'hello') && user) {
-                    username = user.data('username');
-                    store.set(username, user);
-                    event.reply({sent: true});
-                } else if ((event.type != 'hello')) {
-                    store.find('username', event.from, function(from) {
-                        if (from) {
-                            from.dispatch(event);
-                        } else {
-                            unauthenticated();
-                        }
-                    });
-                } else {
-                    unauthenticated();
-                }
-            }, socket);
-        });
-        socket.on('disconnect', function() {
-            if (username) {
-                store.reap(username);
-            }
-        });
-    });
-}
-
-http.listen(APP_PORT, APP_HOST, function(){
-    console.log('Ajax IM server started...');
-});
+app.listen(APP_PORT, APP_HOST);
 
 // Listener endpoint; handled in middleware
 app.get('/app/listen', function(){});
 
-// HTTP handlers
-app.use('/app/noop', function(req, res) {
-    req.event._status = {sent: true};
-    res.jsonp(req.event);
-});
-
 app.use('/app/message', function(req, res) {
-    res.message();
+
+    res.find(req.param('to'), function(user) {
+        if(!user)
+            return res.send(new packages.Error('not online'));
+
+        res.message(user, new packages.Message(
+            req.session.data('username'),
+            req.param('body')
+        ));
+    });
 });
 
 app.use('/app/message/typing', function(req, res) {
-    res.typing();
+    if(~packages.TYPING_STATES.indexOf('typing' + req.param('state'))) {
+        res.find(req.param('to'), function(user) {
+            if(user) {
+                res.message(user, new packages.Status(
+                    req.session.data('username'),
+                    'typing' + req.param('state')
+                ));
+            }
+
+            // Typing updates do not receive confirmations,
+            // as they are not important enough.
+            res.send('');
+        });
+    } else {
+        res.send(new packages.Error('invalid state'));
+    }
 });
 
 app.use('/app/status', function(req, res) {
-    res.status();
+    if(~packages.STATUSES.indexOf(req.param('status'))) {
+        res.status(req.param('status'), req.param('message'));
+        res.send(new packages.Success('status updated'));
+    } else {
+        res.send(new packages.Error('invalid status'));
+    }
 });
 
 app.use('/app/signoff', function(req, res) {
     res.signOff();
+    res.send(new packages.Success('goodbye'));
 });
+
+console.log('Ajax IM server started...');
